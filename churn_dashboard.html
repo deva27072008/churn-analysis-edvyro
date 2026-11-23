@@ -1,0 +1,332 @@
+<title>Churn Retention Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: filter strip, KPI row, 2x2 chart grid, segment table, priority note. Two series only: stayed (blue) vs churned (orange). */
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --ink:#14202e; --ink2:#44536a; --muted:#6b7788;
+  --line:#dde2e9; --grid:#e9edf2; --stay:#2a6fb0; --churn:#d9731a; --accent:#1f3a5f; --chip:#eaf0f7;
+  --display:"Space Grotesk","Inter",system-ui,sans-serif; --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e141c; --surface:#161e29; --ink:#e8edf3; --ink2:#aab6c5; --muted:#8693a3;
+    --line:#273241; --grid:#202b39; --stay:#4f8fd0; --churn:#d9731a; --accent:#9db8d9; --chip:#1e2b3b; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e141c; --surface:#161e29; --ink:#e8edf3; --ink2:#aab6c5; --muted:#8693a3;
+  --line:#273241; --grid:#202b39; --stay:#4f8fd0; --churn:#d9731a; --accent:#9db8d9; --chip:#1e2b3b; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-weight:600;font-size:26px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-family:var(--display);font-weight:500;font-size:15px;margin:0}
+.sub{color:var(--ink2);margin:4px 0 0;max-width:70ch}
+.tag{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.filters label{display:flex;flex-direction:column;gap:3px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+select,button{font:inherit;color:var(--ink)}
+select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 28px 6px 8px;font-size:13px;min-width:140px}
+button{cursor:pointer}
+.reset{background:none;border:1px solid var(--line);border-radius:6px;padding:6px 12px;font-size:13px;color:var(--ink2)}
+.reset:hover{border-color:var(--accent);color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .v{font-family:var(--display);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px;letter-spacing:-.01em}
+.kpi .n{font-size:12px;color:var(--ink2);margin-top:2px;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.card .head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px}
+.card p.cap{margin:2px 0 8px;font-size:12px;color:var(--muted)}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{background:var(--chip);border:1px solid transparent;border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface);font-weight:500}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-bottom:4px}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px}
+.sw-stay{background:var(--stay);border-radius:2px}
+.sw-churn{background:var(--churn);border-radius:50%}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:var(--body);font-size:11px;fill:var(--ink2)}
+svg .strong{fill:var(--ink);font-weight:500}
+svg .axis{stroke:var(--line);stroke-width:1}
+svg .gridl{stroke:var(--grid);stroke-width:1}
+svg [data-tip]{cursor:default}
+.empty{color:var(--muted);font-size:13px;padding:24px 0;text-align:center}
+.tablecard{overflow:hidden}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:500;font-size:12px;color:var(--muted);background:none}
+th button{background:none;border:0;padding:0;font-size:12px;color:var(--muted);font-weight:500}
+th button:hover{color:var(--ink)}
+th[aria-sort] button{color:var(--ink)}
+.dim{color:var(--muted);font-size:12px;margin-right:6px}
+.rate{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
+.rbar{width:56px;height:6px;background:var(--grid);border-radius:3px;overflow:hidden;display:inline-block}
+.rbar b{display:block;height:100%;background:var(--churn)}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink2)}
+.pill.hi{border-color:var(--churn);color:var(--ink)}
+.pill.hi::before{content:"\25B2 ";color:var(--churn)}
+.note{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.note .card h2{margin-bottom:6px}
+.note .card p{margin:0 0 6px;color:var(--ink2)}
+.note .card p b{color:var(--ink);font-weight:600}
+.foot{font-size:12px;color:var(--muted);max-width:90ch}
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 9px;border-radius:6px;max-width:260px;opacity:0;transition:opacity .08s}
+@media (prefers-reduced-motion:reduce){#tip{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag">Subscription churn · synthetic sample of 15 customers</div>
+    <h1>Churn Retention Dashboard</h1>
+    <p class="sub">Who left, how much monthly revenue left with them, and which customer groups to contact first. Use the filters to slice every number on the page.</p>
+  </header>
+
+  <section class="filters" aria-label="Filters">
+    <label>Contract<select id="f-contract"></select></label>
+    <label>Plan<select id="f-plan"></select></label>
+    <label>Payment method<select id="f-pay"></select></label>
+    <label>Tenure (months)<select id="f-tb"></select></label>
+    <button class="reset" id="reset" type="button">Reset filters</button>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Key metrics"></section>
+
+  <section class="grid">
+    <div class="card">
+      <div class="head"><h2>Churn by segment</h2><div class="seg" id="dimseg" role="group" aria-label="Segment dimension"></div></div>
+      <div class="legend"><span><i class="sw-stay"></i>Stayed</span><span><i class="sw-churn"></i>Churned</span></div>
+      <div id="chartA"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Monthly revenue by plan</h2></div>
+      <p class="cap">Recurring revenue per month (₹), split by whether the customer stayed or churned.</p>
+      <div class="legend"><span><i class="sw-stay"></i>Retained</span><span><i class="sw-churn"></i>Lost to churn</span></div>
+      <div id="chartB"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Support tickets in the last 90 days</h2></div>
+      <p class="cap">Customers at each ticket count.</p>
+      <div class="legend"><span><i class="sw-stay"></i>Stayed</span><span><i class="sw-churn"></i>Churned</span></div>
+      <div id="chartC"></div>
+    </div>
+    <div class="card">
+      <div class="head"><h2>Tenure and tickets, customer by customer</h2></div>
+      <p class="cap">Each mark is one customer. Squares stayed, circles churned.</p>
+      <div class="legend"><span><i class="sw-stay"></i>Stayed</span><span><i class="sw-churn"></i>Churned</span></div>
+      <div id="chartD"></div>
+    </div>
+  </section>
+
+  <section class="card tablecard">
+    <div class="head"><h2>Segment table</h2><span class="dim">Click a column to sort. Reflects the filters above.</span></div>
+    <div class="scroll"><table id="tbl"></table></div>
+  </section>
+
+  <section class="note" id="note"></section>
+
+  <p class="foot">Definitions: churn rate = churned customers ÷ customers in view. Retention rate = 1 − churn rate. Revenue lost = sum of monthly charge for churned customers (treated as INR, per the task's field guide). Everything here is descriptive; it does not show that any factor causes churn. Source: customer_churn_sample.csv after cleaning (0 rows removed).</p>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const RAW=[
+["CUST-1001","Female",34,12,"Basic",49.99,599.88,"Month-to-Month",3,"Credit Card","Yes"],
+["CUST-1002","Male",45,24,"Pro",79.99,1919.76,"One Year",1,"Bank Transfer","No"],
+["CUST-1003","Female",29,6,"Basic",49.99,299.94,"Month-to-Month",5,"UPI","Yes"],
+["CUST-1004","Male",52,36,"Enterprise",149.99,5399.64,"Two Year",0,"Credit Card","No"],
+["CUST-1005","Female",41,8,"Pro",79.99,639.92,"Month-to-Month",4,"Debit Card","Yes"],
+["CUST-1006","Male",31,18,"Basic",49.99,899.82,"One Year",2,"UPI","No"],
+["CUST-1007","Female",23,3,"Basic",49.99,149.97,"Month-to-Month",6,"Credit Card","Yes"],
+["CUST-1008","Male",60,48,"Enterprise",149.99,7199.52,"Two Year",1,"Bank Transfer","No"],
+["CUST-1009","Female",38,15,"Pro",79.99,1199.85,"One Year",2,"Credit Card","No"],
+["CUST-1010","Male",27,4,"Basic",49.99,199.96,"Month-to-Month",4,"UPI","Yes"],
+["CUST-1011","Female",49,30,"Enterprise",149.99,4499.70,"Two Year",0,"Credit Card","No"],
+["CUST-1012","Male",33,14,"Pro",79.99,1119.86,"Month-to-Month",3,"Debit Card","Yes"],
+["CUST-1013","Female",55,22,"Basic",49.99,1099.78,"One Year",1,"Bank Transfer","No"],
+["CUST-1014","Male",26,2,"Basic",49.99,99.98,"Month-to-Month",5,"UPI","Yes"],
+["CUST-1015","Female",43,40,"Enterprise",149.99,5999.60,"Two Year",1,"Credit Card","No"]];
+const tb=t=>t<=6?"0-6":t<=12?"7-12":t<=24?"13-24":"25+";
+const kb=k=>k<=2?"0-2":k<=4?"3-4":"5+";
+const D=RAW.map(r=>({id:r[0],gender:r[1],age:r[2],tenure:r[3],plan:r[4],mrr:r[5],total:r[6],contract:r[7],tickets:r[8],pay:r[9],churned:r[10]==="Yes"?1:0,tb:tb(r[3]),kb:kb(r[8])}));
+const DIMS={
+  contract:{label:"Contract",order:["Month-to-Month","One Year","Two Year"]},
+  plan:{label:"Plan",order:["Basic","Pro","Enterprise"]},
+  pay:{label:"Payment",order:["Bank Transfer","Credit Card","Debit Card","UPI"]},
+  tb:{label:"Tenure (months)",order:["0-6","7-12","13-24","25+"]},
+  kb:{label:"Tickets (90 days)",order:["0-2","3-4","5+"]}
+};
+const FILTERS={contract:"f-contract",plan:"f-plan",pay:"f-pay",tb:"f-tb"};
+const state={contract:"All",plan:"All",pay:"All",tb:"All",dim:"contract",sort:{col:"rate",dir:-1}};
+
+const $=id=>document.getElementById(id);
+const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+const inr=n=>"₹"+n.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct=(a,b)=>b?Math.round(a/b*1000)/10:0;
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const rows=()=>D.filter(d=>Object.keys(FILTERS).every(k=>state[k]==="All"||d[k]===state[k]));
+function wilson(k,n){const z=1.96,p=k/n,d=1+z*z/n,c=(p+z*z/(2*n))/d,h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/d;return[Math.max(0,c-h),Math.min(1,c+h)];}
+function niceMax(v,step){return Math.max(step,Math.ceil(v/step)*step);}
+
+/* filters */
+for(const k of Object.keys(FILTERS)){
+  const el=$(FILTERS[k]);
+  el.innerHTML=["All",...DIMS[k].order].map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  el.addEventListener("change",()=>{state[k]=el.value;render();});
+}
+$("reset").addEventListener("click",()=>{for(const k of Object.keys(FILTERS)){state[k]="All";$(FILTERS[k]).value="All";}render();});
+$("dimseg").innerHTML=Object.keys(DIMS).map(k=>`<button type="button" data-dim="${k}">${DIMS[k].label}</button>`).join("");
+$("dimseg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.dim=b.dataset.dim;render();});
+
+/* KPIs */
+function renderKpis(R){
+  const n=R.length,k=sum(R,d=>d.churned),mrr=sum(R,d=>d.mrr),lost=sum(R.filter(d=>d.churned),d=>d.mrr),billed=sum(R.filter(d=>d.churned),d=>d.total);
+  const dash="—";
+  const tiles=[
+    ["Customers in view",n,n?`of ${D.length} total`:"No customers match these filters"],
+    ["Churn rate",n?pct(k,n)+"%":dash,n?`${k} of ${n} customers churned`:""],
+    ["Retention rate",n?pct(n-k,n)+"%":dash,n?`${n-k} of ${n} customers stayed`:""],
+    ["Monthly revenue lost",n?inr(lost):dash,n?`${pct(lost,mrr)}% of ${inr(mrr)} monthly revenue in view`:""],
+    ["Billed to churned customers",n?inr(billed):dash,n?"Total charges over their lifetime":""]
+  ];
+  $("kpis").innerHTML=tiles.map(t=>`<div class="kpi"><div class="l">${t[0]}</div><div class="v">${t[1]}</div><div class="n">${t[2]}</div></div>`).join("");
+}
+
+/* Chart A: horizontal stacked bars by segment */
+function renderA(R){
+  document.querySelectorAll("#dimseg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.dim===state.dim)));
+  const dim=state.dim,segs=DIMS[dim].order.map(s=>{const g=R.filter(d=>d[dim]===s);return{s,n:g.length,k:sum(g,d=>d.churned)};});
+  if(!R.length){$("chartA").innerHTML='<div class="empty">No customers match these filters.</div>';return;}
+  const W=560,L=120,Rr=84,rowH=44,barH=22,T=6,H=T+segs.length*rowH;
+  const maxN=Math.max(1,...segs.map(s=>s.n)),sc=(W-L-Rr)/maxN;
+  let g="";
+  segs.forEach((s,i)=>{
+    const y=T+i*rowH+(rowH-barH)/2,stay=s.n-s.k,ws=stay*sc,wc=s.k*sc;
+    const tip=`${DIMS[dim].label}: ${s.s}. ${s.n} customers, ${s.k} churned (${pct(s.k,s.n)}%), ${stay} stayed.`;
+    g+=`<text class="strong" x="${L-10}" y="${y+barH/2+4}" text-anchor="end">${esc(s.s)}</text>`;
+    if(s.n===0){g+=`<text x="${L}" y="${y+barH/2+4}" style="fill:var(--muted)">none in view</text>`;return;}
+    if(stay>0)g+=`<rect data-tip="${esc(tip)}" x="${L}" y="${y}" width="${Math.max(ws-(s.k?1:0),1)}" height="${barH}" rx="3" fill="var(--stay)"/>`;
+    if(s.k>0)g+=`<rect data-tip="${esc(tip)}" x="${L+ws+(stay?1:0)}" y="${y}" width="${Math.max(wc-(stay?1:0),1)}" height="${barH}" rx="3" fill="var(--churn)"/>`;
+    g+=`<text class="strong" x="${L+s.n*sc+8}" y="${y+barH/2+4}">${pct(s.k,s.n)}%</text><text x="${L+s.n*sc+8+String(pct(s.k,s.n)).length*6.5+14}" y="${y+barH/2+4}" style="fill:var(--muted)">${s.k}/${s.n}</text>`;
+  });
+  $("chartA").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Customers who stayed or churned by ${DIMS[dim].label}"><line class="axis" x1="${L}" y1="${T}" x2="${L}" y2="${H-T}"/>${g}</svg>`;
+}
+
+/* generic vertical stacked chart */
+function vstack({W=560,H=250,items,max,step,yLabel,tipFn,xLabel,fmt}){
+  const l=52,r=10,t=14,b=44,pw=W-l-r,ph=H-t-b,ticks=[];
+  for(let v=0;v<=max+1e-9;v+=step)ticks.push(v);
+  const y=v=>t+ph-(v/max)*ph,slot=pw/items.length,bw=Math.min(54,slot*.62);
+  let g=ticks.map(v=>`<line class="gridl" x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}"/><text x="${l-8}" y="${y(v)+4}" text-anchor="end">${fmt?fmt(v):v}</text>`).join("");
+  g+=`<line class="axis" x1="${l}" x2="${W-r}" y1="${y(0)}" y2="${y(0)}"/>`;
+  items.forEach((it,i)=>{
+    const cx=l+slot*i+slot/2,x=cx-bw/2,tip=tipFn(it);
+    const hs=(it.stay/max)*ph,hc=(it.churn/max)*ph;
+    if(it.stay>0)g+=`<rect data-tip="${esc(tip)}" x="${x}" y="${y(it.stay)}" width="${bw}" height="${hs-(it.churn>0?1:0)}" rx="3" fill="var(--stay)"/>`;
+    if(it.churn>0)g+=`<rect data-tip="${esc(tip)}" x="${x}" y="${y(it.stay+it.churn)}" width="${bw}" height="${hc}" rx="3" fill="var(--churn)"/>`;
+    g+=`<text class="strong" x="${cx}" y="${H-b+16}" text-anchor="middle">${esc(it.label)}</text>`;
+    if(it.sub)g+=`<text x="${cx}" y="${H-b+29}" text-anchor="middle" style="fill:var(--muted)">${esc(it.sub)}</text>`;
+  });
+  g+=`<text x="${l}" y="${H-2}" style="fill:var(--muted)">${esc(xLabel)}</text>`;
+  g+=`<text x="${l}" y="8" style="fill:var(--muted)">${esc(yLabel)}</text>`;
+  return g;
+}
+function renderB(R){
+  if(!R.length){$("chartB").innerHTML='<div class="empty">No customers match these filters.</div>';return;}
+  const items=DIMS.plan.order.map(p=>{const g=R.filter(d=>d.plan===p);return{label:p,sub:g.length?g.length+" customers":"none in view",stay:sum(g.filter(d=>!d.churned),d=>d.mrr),churn:sum(g.filter(d=>d.churned),d=>d.mrr)};});
+  const mx=niceMax(Math.max(...items.map(i=>i.stay+i.churn)),100);
+  const g=vstack({items,max:mx,step:mx/4,yLabel:"₹ per month",xLabel:"Plan",fmt:v=>Math.round(v),
+    tipFn:i=>`${i.label}: ${inr(i.stay+i.churn)} monthly revenue. ${inr(i.churn)} lost to churn (${pct(i.churn,i.stay+i.churn)}%), ${inr(i.stay)} retained.`});
+  $("chartB").innerHTML=`<svg viewBox="0 0 560 250" role="img" aria-label="Monthly revenue by plan, retained versus lost to churn">${g}</svg>`;
+}
+function renderC(R){
+  if(!R.length){$("chartC").innerHTML='<div class="empty">No customers match these filters.</div>';return;}
+  const items=[0,1,2,3,4,5,6].map(k=>{const g=R.filter(d=>d.tickets===k);return{label:String(k),stay:g.filter(d=>!d.churned).length,churn:g.filter(d=>d.churned).length};});
+  const mx=niceMax(Math.max(...items.map(i=>i.stay+i.churn)),1);
+  const step=mx>6?Math.ceil(mx/4):1,top=niceMax(mx,step);
+  const g=vstack({items,max:top,step,yLabel:"Customers",xLabel:"Support tickets in the last 90 days",
+    tipFn:i=>`${i.label} tickets: ${i.stay+i.churn} customers, ${i.churn} churned, ${i.stay} stayed.`});
+  $("chartC").innerHTML=`<svg viewBox="0 0 560 250" role="img" aria-label="Customers by support ticket count, stayed versus churned">${g}</svg>`;
+}
+function renderD(R){
+  if(!R.length){$("chartD").innerHTML='<div class="empty">No customers match these filters.</div>';return;}
+  const W=560,H=250,l=52,r=14,t=14,b=44,pw=W-l-r,ph=H-t-b,x=v=>l+(v/50)*pw,y=v=>t+ph-(v/6)*ph;
+  let g="";
+  [0,2,4,6].forEach(v=>{g+=`<line class="gridl" x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}"/><text x="${l-8}" y="${y(v)+4}" text-anchor="end">${v}</text>`;});
+  [0,10,20,30,40,50].forEach(v=>{g+=`<text x="${x(v)}" y="${H-b+16}" text-anchor="middle">${v}</text>`;});
+  g+=`<line class="axis" x1="${l}" x2="${W-r}" y1="${y(0)}" y2="${y(0)}"/>`;
+  g+=`<text x="${l}" y="${H-2}" style="fill:var(--muted)">Tenure (months)</text><text x="${l}" y="8" style="fill:var(--muted)">Tickets</text>`;
+  R.forEach(d=>{
+    const tip=`${d.id}: ${d.plan}, ${d.contract}. Tenure ${d.tenure} months, ${d.tickets} tickets, ${inr(d.mrr)} per month. ${d.churned?"Churned":"Stayed"}.`;
+    if(d.churned)g+=`<circle data-tip="${esc(tip)}" cx="${x(d.tenure)}" cy="${y(d.tickets)}" r="6" fill="var(--churn)" stroke="var(--surface)" stroke-width="2"/>`;
+    else g+=`<rect data-tip="${esc(tip)}" x="${x(d.tenure)-5}" y="${y(d.tickets)-5}" width="10" height="10" rx="2" fill="var(--stay)" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  $("chartD").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Scatter of tenure against support tickets, one mark per customer">${g}</svg>`;
+}
+
+/* Segment table */
+function segRows(R){
+  const out=[];
+  for(const dim of Object.keys(DIMS))for(const s of DIMS[dim].order){
+    const g=R.filter(d=>d[dim]===s);if(!g.length)continue;
+    const k=sum(g,d=>d.churned);
+    out.push({group:DIMS[dim].label,seg:s,n:g.length,k,rate:k/g.length,lost:sum(g.filter(d=>d.churned),d=>d.mrr),tick:sum(g,d=>d.tickets)/g.length,ten:sum(g,d=>d.tenure)/g.length});
+  }
+  return out;
+}
+const COLS=[["seg","Segment"],["n","Customers"],["k","Churned"],["rate","Churn rate"],["lost","Revenue lost / month"],["tick","Avg tickets"],["ten","Avg tenure (mo)"],["flag","Priority"]];
+function flag(r){return r.rate>=.75&&r.n>=3?["Contact first","hi"]:r.rate>=.4?["Monitor",""]:["Low",""];}
+function renderTable(R){
+  if(!R.length){$("tbl").innerHTML='<tbody><tr><td class="empty">No customers match these filters.</td></tr></tbody>';return;}
+  const rs=segRows(R),{col,dir}=state.sort;
+  rs.sort((a,b)=>{const va=col==="seg"?a.group+a.seg:col==="flag"?a.rate:a[col],vb=col==="seg"?b.group+b.seg:col==="flag"?b.rate:b[col];return(va<vb?-1:va>vb?1:b.lost-a.lost)*dir;});
+  $("tbl").innerHTML=`<thead><tr>${COLS.map(([c,l])=>`<th scope="col" ${col===c?`aria-sort="${dir>0?"ascending":"descending"}"`:""}><button type="button" data-col="${c}">${l}${col===c?(dir>0?" ▲":" ▼"):""}</button></th>`).join("")}</tr></thead><tbody>${rs.map(r=>{const f=flag(r);return`<tr><td><span class="dim">${esc(r.group)}</span>${esc(r.seg)}</td><td>${r.n}</td><td>${r.k}</td><td><span class="rate"><span class="rbar"><b style="width:${r.rate*100}%"></b></span>${pct(r.k,r.n)}%</span></td><td>${inr(r.lost)}</td><td>${r.tick.toFixed(1)}</td><td>${r.ten.toFixed(1)}</td><td><span class="pill ${f[1]}">${f[0]}</span></td></tr>`;}).join("")}</tbody>`;
+}
+$("tbl").addEventListener("click",e=>{const b=e.target.closest("button[data-col]");if(!b)return;const c=b.dataset.col;state.sort=state.sort.col===c?{col:c,dir:-state.sort.dir}:{col:c,dir:c==="seg"?1:-1};renderTable(rows());});
+
+/* Recommendation panel (always on the full sample) */
+function renderNote(){
+  const prof=d=>d.contract==="Month-to-Month"&&d.tickets>=3;
+  const P=D.filter(prof),Pk=sum(P,d=>d.churned),Plost=sum(P.filter(d=>d.churned),d=>d.mrr);
+  const stayed=D.filter(d=>!d.churned),stayedMatch=stayed.filter(prof).length;
+  const k=sum(D,d=>d.churned),[lo,hi]=wilson(k,D.length),allLost=sum(D.filter(d=>d.churned),d=>d.mrr);
+  $("note").innerHTML=`
+   <div class="card"><h2>Who to contact first</h2>
+     <p>Audience: the subscription retention team. Decision: which groups to call first.</p>
+     <p><b>Month-to-Month customers with 3 or more tickets in 90 days.</b> ${P.length} customers in this sample, ${Pk} churned (${pct(Pk,P.length)}%), ${inr(Plost)} of the ${inr(allLost)} monthly revenue lost.</p>
+     <p>Basic-plan and short-tenure (under 7 months) customers overlap heavily with this group.</p></div>
+   <div class="card"><h2>What this data cannot tell us</h2>
+     <p>Only ${D.length} customers, so the overall churn rate of ${pct(k,D.length)}% could plausibly be anywhere from ${Math.round(lo*100)}% to ${Math.round(hi*100)}%.</p>
+     <p>${stayedMatch===0?`<b>None of the ${stayed.length} retained customers match the profile above</b>, so the file describes who already left. It does not identify customers who are at risk today.`:`${stayedMatch} retained customers match the profile.`}</p>
+     <p>Contract, plan, tenure and tickets move together, so their separate effects cannot be separated here.</p></div>
+   <div class="card"><h2>Next measurement</h2>
+     <p>Apply the same profile to the current active base. Contact a test group and keep a comparable group uncontacted.</p>
+     <p>Compare 90-day retention between the two groups. That tells you whether outreach changes the outcome, which this dataset cannot.</p></div>`;
+}
+
+function render(){const R=rows();renderKpis(R);renderA(R);renderB(R);renderC(R);renderD(R);renderTable(R);}
+renderNote();render();
+
+/* tooltip */
+const tip=$("tip");
+function showTip(e){
+  const el=e.target.closest&&e.target.closest("[data-tip]");
+  if(!el){tip.style.opacity=0;return;}
+  tip.textContent=el.getAttribute("data-tip");tip.style.opacity=1;
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  let x=e.clientX+14,y=e.clientY+14;
+  if(x+w>innerWidth-8)x=e.clientX-w-14;if(y+h>innerHeight-8)y=e.clientY-h-14;
+  tip.style.left=Math.max(8,x)+"px";tip.style.top=Math.max(8,y)+"px";
+}
+document.addEventListener("pointermove",showTip);
+document.addEventListener("pointerdown",showTip);
+document.addEventListener("pointerleave",()=>{tip.style.opacity=0;});
+</script>
